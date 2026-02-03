@@ -15,3 +15,8 @@ def get_connector(name: str) -> Connector:
     if not cls:
         raise ValueError(f"Unknown connector: {name}")
     return cls()
+
+
+def list_connectors() -> list[str]:
+    """Return available connector names."""
+    return sorted(_REGISTRY.keys())

@@ -8,7 +8,8 @@ from sqlalchemy.orm import Session
 
 from .db import Base, engine, SessionLocal
 from .models import Job, JobExecution
-from .connectors.registry import get_connector
+from .connectors.registry import get_connector, list_connectors
+
 
 Base.metadata.create_all(bind=engine)
 
@@ -177,3 +178,7 @@ def retry_job(job_id: str, background: BackgroundTasks, db: Session = Depends(ge
     background.add_task(run_job, str(job.id), str(new_exe.id))
 
     return {"job_id": str(job.id), "status": job.status, "execution_id": str(new_exe.id), "attempt": new_exe.attempt}
+
+@app.get("/connectors")
+def connectors():
+    return {"connectors": list_connectors()}
