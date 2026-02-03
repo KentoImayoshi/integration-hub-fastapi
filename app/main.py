@@ -4,6 +4,7 @@ import time
 from fastapi import FastAPI, Depends, BackgroundTasks, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
+from typing import Optional
 
 from .db import Base, engine, SessionLocal
 from .models import Job, JobExecution
@@ -85,35 +86,36 @@ def create_job(body: JobCreate, background: BackgroundTasks, db: Session = Depen
 
     return {"job_id": str(job.id), "status": job.status, "execution_id": str(exe.id), "attempt": exe.attempt}
 
+@app.get("/jobs")
+def list_jobs(
+    status: Optional[str] = None,
+    connector_name: Optional[str] = None,
+    limit: int = 50,
+    offset: int = 0,
+    db: Session = Depends(get_db),
+):
+    limit = min(max(limit, 1), 200)
+    offset = max(offset, 0)
 
-@app.get("/jobs/{job_id}")
-def get_job(job_id: str, db: Session = Depends(get_db)):
-    job = db.get(Job, job_id)
-    if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
+    q = db.query(Job)
 
-    return {
-        "job_id": str(job.id),
-        "connector_name": job.connector_name,
-        "status": job.status,
-        "payload": job.payload,
-        "created_at": job.created_at,
-        "updated_at": job.updated_at,
-        "executions": [
-            {
-                "execution_id": str(exe.id),
-                "attempt": exe.attempt,
-                "status": exe.status,
-                "started_at": exe.started_at,
-                "finished_at": exe.finished_at,
-                "output": exe.output,
-                "error_message": exe.error_message,
-                "created_at": exe.created_at,
-            }
-            for exe in job.executions
-        ],
-    }
+    if status:
+        q = q.filter(Job.status == status)
+    if connector_name:
+        q = q.filter(Job.connector_name == connector_name)
 
+    jobs = q.order_by(Job.created_at.desc()).offset(offset).limit(limit).all()
+
+    return [
+        {
+            "job_id": str(j.id),
+            "connector_name": j.connector_name,
+            "status": j.status,
+            "created_at": j.created_at,
+            "updated_at": j.updated_at,
+        }
+        for j in jobs
+    ]
 
 @app.get("/jobs")
 def list_jobs(limit: int = 50, db: Session = Depends(get_db)):
