@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timezone
 import time
 from typing import Optional
 
@@ -41,7 +41,7 @@ def run_job(job_id: str, execution_id: str):
         # Mark as running
         job.status = "RUNNING"
         exe.status = "RUNNING"
-        exe.started_at = datetime.utcnow()
+        exe.started_at = datetime.now(timezone.utc)
         db.commit()
 
         # Optional: simulate processing time
@@ -54,7 +54,7 @@ def run_job(job_id: str, execution_id: str):
         # Mark as success and persist output
         exe.status = "SUCCESS"
         exe.output = output
-        exe.finished_at = datetime.utcnow()
+        exe.finished_at = datetime.now(timezone.utc)
         job.status = "SUCCESS"
         db.commit()
 
@@ -64,7 +64,7 @@ def run_job(job_id: str, execution_id: str):
         if job and exe:
             exe.status = "FAILED"
             exe.error_message = f"{type(e).__name__}: {e}"
-            exe.finished_at = datetime.utcnow()
+            exe.finished_at = datetime.now(timezone.utc)
             job.status = "FAILED"
             db.commit()
     finally:
@@ -73,7 +73,7 @@ def run_job(job_id: str, execution_id: str):
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "ts": datetime.utcnow().isoformat()}
+    return {"status": "ok", "ts": datetime.now(timezone.utc).isoformat()}
 
 
 @app.post("/jobs")
