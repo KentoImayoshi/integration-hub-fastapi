@@ -5,11 +5,12 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+*.pyc
 
 # Virtual env
 .venv/
 venv/
-env/
+.env/
 
 # OS / IDE
 .DS_Store
