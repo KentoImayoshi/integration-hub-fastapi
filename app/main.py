@@ -8,6 +8,7 @@ from typing import Optional
 
 from .db import Base, engine, SessionLocal
 from .models import Job, JobExecution
+from .connectors.registry import get_connector
 
 Base.metadata.create_all(bind=engine)
 
@@ -28,7 +29,7 @@ class JobCreate(BaseModel):
 
 
 def run_job(job_id: str, execution_id: str):
-    """Executa um job e registra resultado na execution (MVP: simulação)."""
+    """Execute a job and persist its execution result (MVP: simulated work)."""
     db = SessionLocal()
     try:
         job = db.get(Job, job_id)
@@ -36,16 +37,16 @@ def run_job(job_id: str, execution_id: str):
         if not job or not exe:
             return
 
-        # RUNNING
+        # Mark as running
         job.status = "RUNNING"
         exe.status = "RUNNING"
         exe.started_at = datetime.utcnow()
         db.commit()
 
-        # Simula trabalho
+        # Simulate work (e.g., calling an external API)
         time.sleep(2)
 
-        # SUCCESS + output
+        # Mark as success and persist output
         exe.status = "SUCCESS"
         exe.output = {"echo": job.payload}
         exe.finished_at = datetime.utcnow()
@@ -57,7 +58,7 @@ def run_job(job_id: str, execution_id: str):
         exe = db.get(JobExecution, execution_id)
         if job and exe:
             exe.status = "FAILED"
-            exe.error_message = str(e)
+            exe.error_message = f"{type(e).__name__}: {e}"
             exe.finished_at = datetime.utcnow()
             job.status = "FAILED"
             db.commit()
