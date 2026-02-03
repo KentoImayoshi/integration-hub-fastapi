@@ -6,11 +6,12 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from .db import Base, engine, SessionLocal
-from .models import Job
+from .models import Job, JobExecution
 
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="SpaceX Integration Hub (MVP)")
+
 
 def get_db():
     db = SessionLocal()
@@ -19,38 +20,54 @@ def get_db():
     finally:
         db.close()
 
+
 class JobCreate(BaseModel):
     connector_name: str
     payload: dict
 
-def run_job(job_id: str):
-    """Simula execução do job (MVP). Depois trocamos por Redis/Celery."""
+
+def run_job(job_id: str, execution_id: str):
+    """Executa um job e registra resultado na execution (MVP: simulação)."""
     db = SessionLocal()
     try:
         job = db.get(Job, job_id)
-        if not job:
+        exe = db.get(JobExecution, execution_id)
+        if not job or not exe:
             return
 
+        # RUNNING
         job.status = "RUNNING"
+        exe.status = "RUNNING"
+        exe.started_at = datetime.utcnow()
         db.commit()
 
-        # Simula trabalho (ex.: chamar API externa)
+        # Simula trabalho
         time.sleep(2)
 
+        # SUCCESS + output
+        exe.status = "SUCCESS"
+        exe.output = {"echo": job.payload}
+        exe.finished_at = datetime.utcnow()
         job.status = "SUCCESS"
         db.commit()
-    except Exception:
-        # Em MVP, se der erro marca FAILED (sem detalhes ainda)
+
+    except Exception as e:
         job = db.get(Job, job_id)
-        if job:
+        exe = db.get(JobExecution, execution_id)
+        if job and exe:
+            exe.status = "FAILED"
+            exe.error_message = str(e)
+            exe.finished_at = datetime.utcnow()
             job.status = "FAILED"
             db.commit()
     finally:
         db.close()
 
+
 @app.get("/health")
 def health():
     return {"status": "ok", "ts": datetime.utcnow().isoformat()}
+
 
 @app.post("/jobs")
 def create_job(body: JobCreate, background: BackgroundTasks, db: Session = Depends(get_db)):
@@ -59,16 +76,22 @@ def create_job(body: JobCreate, background: BackgroundTasks, db: Session = Depen
     db.commit()
     db.refresh(job)
 
-    # dispara em background
-    background.add_task(run_job, str(job.id))
+    exe = JobExecution(job_id=job.id, attempt=1, status="PENDING")
+    db.add(exe)
+    db.commit()
+    db.refresh(exe)
 
-    return {"job_id": str(job.id), "status": job.status}
+    background.add_task(run_job, str(job.id), str(exe.id))
+
+    return {"job_id": str(job.id), "status": job.status, "execution_id": str(exe.id), "attempt": exe.attempt}
+
 
 @app.get("/jobs/{job_id}")
 def get_job(job_id: str, db: Session = Depends(get_db)):
     job = db.get(Job, job_id)
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
+
     return {
         "job_id": str(job.id),
         "connector_name": job.connector_name,
@@ -76,11 +99,25 @@ def get_job(job_id: str, db: Session = Depends(get_db)):
         "payload": job.payload,
         "created_at": job.created_at,
         "updated_at": job.updated_at,
+        "executions": [
+            {
+                "execution_id": str(exe.id),
+                "attempt": exe.attempt,
+                "status": exe.status,
+                "started_at": exe.started_at,
+                "finished_at": exe.finished_at,
+                "output": exe.output,
+                "error_message": exe.error_message,
+                "created_at": exe.created_at,
+            }
+            for exe in job.executions
+        ],
     }
 
+
 @app.get("/jobs")
-def list_jobs(db: Session = Depends(get_db)):
-    jobs = db.query(Job).order_by(Job.created_at.desc()).limit(50).all()
+def list_jobs(limit: int = 50, db: Session = Depends(get_db)):
+    jobs = db.query(Job).order_by(Job.created_at.desc()).limit(min(limit, 200)).all()
     return [
         {
             "job_id": str(j.id),
@@ -91,3 +128,26 @@ def list_jobs(db: Session = Depends(get_db)):
         }
         for j in jobs
     ]
+
+
+@app.post("/jobs/{job_id}/retry")
+def retry_job(job_id: str, background: BackgroundTasks, db: Session = Depends(get_db)):
+    job = db.get(Job, job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    last_attempt = 0
+    for exe in job.executions:
+        if exe.attempt > last_attempt:
+            last_attempt = exe.attempt
+
+    new_exe = JobExecution(job_id=job.id, attempt=last_attempt + 1, status="PENDING")
+    db.add(new_exe)
+
+    job.status = "PENDING"
+    db.commit()
+    db.refresh(new_exe)
+
+    background.add_task(run_job, str(job.id), str(new_exe.id))
+
+    return {"job_id": str(job.id), "status": job.status, "execution_id": str(new_exe.id), "attempt": new_exe.attempt}
