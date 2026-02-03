@@ -1,10 +1,11 @@
 from typing import Dict, Type
 from .base import Connector
 from .echo import EchoConnector
-
+from .spacex_latest_launch import SpaceXLatestLaunchConnector
 
 _REGISTRY: Dict[str, Type[Connector]] = {
     EchoConnector.name: EchoConnector,
+    SpaceXLatestLaunchConnector.name: SpaceXLatestLaunchConnector,
 }
 
 
