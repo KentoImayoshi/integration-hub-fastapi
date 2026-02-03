@@ -14,19 +14,21 @@ jobs:
       postgres:
         image: postgres:16-alpine
         env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: postgres
+          POSTGRES_USER: spacex
+          POSTGRES_PASSWORD: spacex
+          POSTGRES_DB: spacex
         ports:
           - 5432:5432
         options: >-
-          --health-cmd="pg_isready -U postgres -d postgres"
+          --health-cmd="pg_isready -U spacex -d spacex"
           --health-interval=10s
           --health-timeout=5s
           --health-retries=5
 
     env:
-      DATABASE_URL: postgresql+psycopg2://postgres:postgres@localhost:5432/postgres
+      DATABASE_URL: postgresql+psycopg2://spacex:spacex@localhost:5432/spacex
+      PYTHONPATH: .
+
 
     steps:
       - name: Checkout
@@ -43,12 +45,14 @@ jobs:
           python -m pip install -r requirements.txt
           python -m pip install pytest
 
+
       - name: Wait for Postgres
         run: |
           for i in {1..30}; do
-            pg_isready -h localhost -p 5432 -U postgres -d postgres && break
+            pg_isready -h localhost -p 5432 -U spacex -d spacex && break
             sleep 1
           done
+
 
       - name: Run tests
         run: |
