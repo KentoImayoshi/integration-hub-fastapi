@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from .db import Base, engine, SessionLocal
 from .models import Job, JobExecution
-from .connectors.registry import get_connector, list_connectors
+from .connectors.registry import get_connector, list_connectors, connector_exists
 
 
 Base.metadata.create_all(bind=engine)
@@ -78,6 +78,13 @@ def health():
 
 @app.post("/jobs")
 def create_job(body: JobCreate, background: BackgroundTasks, db: Session = Depends(get_db)):
+    # Fail fast if connector does not exist
+    if not connector_exists(body.connector_name):
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown connector: {body.connector_name}",
+        )
+
     job = Job(connector_name=body.connector_name, payload=body.payload, status="PENDING")
     db.add(job)
     db.commit()
@@ -91,7 +98,12 @@ def create_job(body: JobCreate, background: BackgroundTasks, db: Session = Depen
 
     background.add_task(run_job, str(job.id), str(exe.id))
 
-    return {"job_id": str(job.id), "status": job.status, "execution_id": str(exe.id), "attempt": exe.attempt}
+    return {
+        "job_id": str(job.id),
+        "status": job.status,
+        "execution_id": str(exe.id),
+        "attempt": exe.attempt,
+    }
 
 
 @app.get("/jobs")
