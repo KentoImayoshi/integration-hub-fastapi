@@ -4,6 +4,8 @@ A lightweight **Integration Hub** built with **FastAPI + Postgres** that runs co
 
 This project is designed as a portfolio-friendly foundation for building real integrations (e.g., SpaceX APIs, webhooks, ETL triggers, internal systems) using a plugin-style connector architecture.
 
+[![tests](https://github.com/KentoImayoshi/integration-hub-fastapi/actions/workflows/tests.yml/badge.svg)](https://github.com/KentoImayoshi/integration-hub-fastapi/actions/workflows/tests.yml)
+
 ---
 
 ## Features
